@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Перекуп: Авито</title>
+<style>
+:root{--bg:var(--tg-theme-bg-color,#f3f4f6);--card:var(--tg-theme-secondary-bg-color,#fff);--txt:var(--tg-theme-text-color,#1b1f24);--hint:var(--tg-theme-hint-color,#7a8190);--acc:var(--tg-theme-button-color,#0a84ff);--accTxt:var(--tg-theme-button-text-color,#fff);--bad:#e0443e;--ok:#2aa84a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card);border-bottom:1px solid #0001}
+#money{font-size:18px;font-weight:700}
+#day{color:var(--hint);font-size:12px}
+nav{display:flex;position:sticky;top:56px;z-index:4;background:var(--card);border-bottom:1px solid #0001}
+nav button{flex:1;padding:10px;border:0;background:none;color:var(--hint);font-weight:600;border-bottom:2px solid transparent}
+nav button.on{color:var(--acc);border-bottom-color:var(--acc)}
+main{padding:10px 10px 90px}
+button{font:inherit;cursor:pointer}
+.btn{border:0;border-radius:10px;padding:9px 12px;background:var(--acc);color:var(--accTxt);font-weight:600}
+.btn.sec{background:#0000000d;color:var(--txt)}
+.btn.bad{background:var(--bad);color:#fff}
+.btn.ok{background:var(--ok);color:#fff}
+.btn:disabled{opacity:.4}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px}
+.chip{border:0;border-radius:16px;padding:6px 12px;background:var(--card);color:var(--txt);white-space:nowrap}
+.chip.on{background:var(--acc);color:var(--accTxt)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.card{background:var(--card);border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column}
+.card .info{padding:8px}
+.card b{display:block;font-size:13px;margin-bottom:2px}
+.price{font-weight:700;font-size:15px}
+small,.hint{color:var(--hint)}
+.pic{height:110px;display:flex;align-items:center;justify-content:center;position:relative}
+.pic svg{width:86%;height:auto}
+.emo{font-size:56px}
+.badge{position:absolute;top:6px;right:6px;background:var(--bad);color:#fff;border-radius:10px;padding:2px 7px;font-size:11px;font-weight:700}
+.badge.g{background:var(--ok)}
+.tag{position:absolute;top:6px;left:6px;background:#000a;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px}
+#modal{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:10}
+#modal.hide{display:none}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:12px;position:relative}
+.x{position:absolute;right:10px;top:10px;border:0;background:#0000000f;border-radius:50%;width:30px;height:30px;font-size:14px}
+.sec-box{background:var(--card);border-radius:12px;padding:10px;margin:8px 0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #0001}
+.row:last-child{border:0}
+.row.bad span:first-child{color:var(--bad)}
+.row.ok span:first-child{color:var(--ok)}
+input{width:100%;padding:9px;border-radius:10px;border:1px solid #0002;background:var(--card);color:var(--txt);font:inherit}
+.inl{display:flex;gap:6px;margin-top:6px}
+.inl input{flex:1}
+.log{font-size:13px;margin-top:6px}
+.log div{padding:3px 0}
+.empty{text-align:center;color:var(--hint);padding:40px 10px}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#000d;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transition:.25s;pointer-events:none;max-width:90%;text-align:center;z-index:20}
+#toast.show{opacity:1}
+h3{margin:14px 0 6px;font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <div><div id="money"></div><div id="day"></div></div>
+  <button class="btn" data-a="nextday">▶ День</button>
+</header>
+<nav>
+  <button data-t="market" class="on">Авито</button>
+  <button data-t="garage">Гараж</button>
+  <button data-t="stats">Итоги</button>
+</nav>
+<main id="view"></main>
+<div id="modal" class="hide"><div class="sheet"><button class="x" data-a="close">✕</button><div id="mbody"></div></div></div>
+<div id="toast"></div>
+
+<script>
+const KEY='avito_flip_v1';
+const $=s=>document.querySelector(s);
+const fmt=n=>Math.round(n).toLocaleString('ru-RU')+' ₽';
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const r100=n=>Math.max(100,Math.round(n/100)*100);
+const COLORS=['#e74c3c','#3498db','#2ecc71','#f1c40f','#9b59b6','#7f8c8d','#1abc9c','#34495e','#e67e22'];
+const RENT=500;
+
+// w = доля стоимости, которую теряет товар при поломке детали; cf = стоимость ремонта как доля рыночной цены
+const TPL={
+  phone:{n:'Смартфон',e:'📱',parts:[['Экран',.2,.12],['Аккумулятор',.1,.05],['Корпус',.08,.06],['Камера',.1,.15]]},
+  laptop:{n:'Ноутбук',e:'💻',parts:[['Матрица',.25,.2],['Клавиатура',.08,.08],['Батарея',.1,.06],['SSD',.1,.1]]},
+  console:{n:'Консоль',e:'🎮',parts:[['HDMI-порт',.1,.08],['Дисковод',.12,.1],['Геймпад',.05,.05],['Чистка и термопаста',.15,.06]]},
+  bike:{n:'Велосипед',e:'🚲',parts:[['Трансмиссия',.1,.05],['Тормоза',.1,.06],['Рама',.2,.25]]},
+  watch:{n:'Часы',e:'⌚',parts:[['Стекло',.15,.1],['Механизм',.25,.3]]},
+  car:{n:'Автомобиль',e:'🚗',parts:[['Двигатель',.25,.2],['КПП',.12,.12],['Кузов',.15,.1],['Подвеска',.08,.07],['Салон',.05,.04]]}
+};
+const CATALOG=[
+  ['phone','iPhone 13 128GB',42000],['phone','Samsung Galaxy S21',28000],['phone','Xiaomi Redmi Note 11',12000],['phone','iPhone 14 Pro',75000],['phone','Google Pixel 7',30000],
+  ['laptop','MacBook Air M1',62000],['laptop','ThinkPad T480',25000],['laptop','ASUS ROG G14',85000],['laptop','Lenovo IdeaPad 3',30000],
+  ['console','PlayStation 5',45000],['console','Xbox Series X',42000],['console','Nintendo Switch OLED',25000],
+  ['bike','Stels Navigator 500',18000],['bike','Giant Escape 3',55000],['bike','Forward Sporting',30000],
+  ['watch','Casio G-Shock',9000],['watch','Seiko 5 Sports',22000],['watch','Apple Watch Series 7',20000],
+  ['car','Lada Vesta 2018',850000],['car','Kia Rio 2016',780000],['car','Toyota Camry 2012',1200000],['car','BMW 3 E90 2008',650000],['car','Hyundai Solaris 2014',560000],['car','VW Polo 2015',600000],['car','Nissan Qashqai 2014',1000000]
+];
+
+let S, tab='market', cat='all', modalId=null;
+
+function newState(){
+  S={money:150000,day:1,uid:1,items:[],stats:{bought:0,sold:0,profit:0,repairs:0}};
+  for(let i=0;i<6;i++) makeListing();
+  return S;
+}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));return s&&s.items?s:null}catch(e){return null}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+
+function fair(it){
+  const lost=TPL[it.cat].parts.reduce((s,p,i)=>s+(it.broken[i]?p[1]:0),0);
+  return it.market*(1-lost);
+}
+function repairCost(it,i){return r100(it.market*TPL[it.cat].parts[i][2])}
+function repairGain(it,i){return it.market*TPL[it.cat].parts[i][1]}
+function fullCost(it){
+  return r100(it.broken.reduce((s,b,i)=>s+(b?repairCost(it,i):0),0)*0.85);
+}
+function brokenCount(it){return it.broken.filter(Boolean).length}
+function find(id){return S.items.find(i=>i.uid===id)}
+
+function makeListing(){
+  const [c,name,base]=pick(CATALOG);
+  const it={uid:S.uid++,cat:c,name,market:r100(base*rnd(.92,1.08)),color:pick(COLORS),
+    broken:TPL[c].parts.map(()=>Math.random()<.5),status:'market',spent:0,price:0,offer:0,rounds:0,log:[]};
+  if(!it.broken.some(Boolean)) it.broken[Math.floor(Math.random()*it.broken.length)]=true;
+  const v=fair(it);
+  it.ask=r100(v*rnd(.85,1.15));
+  it.min=r100(it.ask*rnd(.8,.93));
+  S.items.push(it);
+  return it;
+}
+
+function pic(it){
+  if(it.cat==='car'){
+    return `<div class="pic" style="background:linear-gradient(#cfe9ff,#f4f8ff)"><svg viewBox="0 0 200 110">
+<rect x="18" y="52" width="164" height="32" rx="12" fill="${it.color}"/>
+<path d="M50 52 L72 22 H128 L150 52 Z" fill="${it.color}"/>
+<path d="M78 50 L90 30 H114 L124 50 Z" fill="#cfe8ff"/>
+<rect x="170" y="60" width="8" height="6" rx="2" fill="#fff8a0"/>
+<circle cx="55" cy="84" r="14" fill="#222"/><circle cx="145" cy="84" r="14" fill="#222"/>
+<circle cx="55" cy="84" r="6" fill="#aaa"/><circle cx="145" cy="84" r="6" fill="#aaa"/>
+${it.broken.some(Boolean)?'<path d="M96 60 L104 70 L98 78 L108 88" stroke="#e0443e" stroke-width="2.5" fill="none"/>':''}
+</svg></div>`;
+  }
+  return `<div class="pic" style="background:linear-gradient(135deg,${it.color}66,#fff)"><span class="emo">${TPL[it.cat].e}</span></div>`;
+}
+
+function render(){
+  $('#money').textContent=fmt(S.money);
+  $('#day').textContent='День '+S.day;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+  $('#view').innerHTML = tab==='market'?renderMarket(): tab==='garage'?renderGarage(): renderStats();
+  save();
+}
+
+function renderMarket(){
+  const cats=[['all','Все'],...Object.entries(TPL).map(([k,v])=>[k,v.n])];
+  const list=S.items.filter(i=>i.status==='market'&&(cat==='all'||i.cat===cat));
+  return `<div class="chips">${cats.map(([k,n])=>`<button class="chip ${cat===k?'on':''}" data-a="cat" data-c="${k}">${n}</button>`).join('')}</div>
+  <div class="grid">${list.map(it=>`<div class="card" data-a="open" data-id="${it.uid}">${pic(it)}
+    <div class="info"><b>${it.name}</b><div class="price">${fmt(it.ask)}</div><small>${TPL[it.cat].n} · б/у</small></div></div>`).join('')}</div>
+  ${list.length?'':'<div class="empty">Ничего нет. Пройдите день, чтобы появились новые объявления.</div>'}`;
+}
+
+function renderGarage(){
+  const list=S.items.filter(i=>i.status!=='market');
+  if(!list.length) return '<div class="empty">Гараж пуст. Купите что-нибудь на Авито.</div>';
+  return `<div class="grid">${list.map(it=>{
+    const b=brokenCount(it);
+    return `<div class="card" data-a="open" data-id="${it.uid}">${pic(it)}
+    <span class="badge ${b?'':'g'}">${b?'⚠ '+b:'✓'}</span>${it.status==='listed'?'<span class="tag">на продаже</span>':''}
+    <div class="info"><b>${it.name}</b><div class="price">${fmt(fair(it))}</div><small>${it.status==='listed'?'Выставлено за '+fmt(it.price):'оценка'} · куплено ${fmt(it.spent)}</small></div></div>`}).join('')}</div>`;
+}
+
+function renderStats(){
+  const owned=S.items.filter(i=>i.status!=='market');
+  const worth=S.money+owned.reduce((s,i)=>s+fair(i),0);
+  const s=S.stats;
+  return `<div class="sec-box">
+    <div class="row"><span>Баланс</span><b>${fmt(S.money)}</b></div>
+    <div class="row"><span>Стоимость имущества (оценка)</span><b>${fmt(owned.reduce((a,i)=>a+fair(i),0))}</b></div>
+    <div class="row"><span>Общая стоимость</span><b>${fmt(worth)}</b></div>
+    <div class="row"><span>Дней прошло</span><b>${S.day}</b></div>
+  </div>
+  <div class="sec-box">
+    <div class="row"><span>Куплено</span><b>${s.bought}</b></div>
+    <div class="row"><span>Продано</span><b>${s.sold}</b></div>
+    <div class="row"><span>Потрачено на ремонт</span><b>${fmt(s.repairs)}</b></div>
+    <div class="row"><span>Чистая прибыль с продаж</span><b style="color:${s.profit>=0?'var(--ok)':'var(--bad)'}">${fmt(s.profit)}</b></div>
+  </div>
+  <p class="hint">Ремонт выгоден, если восстановленная стоимость детали выше её цены. Например, экран телефона часто окупается, а камера — редко. Капремонт дешевле суммы отдельных ремонтов на 15%.</p>
+  <button class="btn sec" data-a="reset" style="width:100%">Начать заново</button>`;
+}
+
+function openItem(id){modalId=id;renderModal();$('#modal').classList.remove('hide')}
+function closeModal(){modalId=null;$('#modal').classList.add('hide')}
+
+function renderModal(){
+  const it=find(modalId); if(!it){closeModal();return}
+  const parts=TPL[it.cat].parts;
+  const partsHtml=parts.map((p,i)=>{
+    const br=it.broken[i];
+    let act='';
+    if(it.status!=='market'&&br) act=`<span><button class="btn sec" data-a="repair" data-id="${it.uid}" data-i="${i}" ${S.money<repairCost(it,i)?'disabled':''}>Починить ${fmt(repairCost(it,i))}</button><br><small>даёт +${fmt(repairGain(it,i))}</small></span>`;
+    return `<div class="row ${br?'bad':'ok'}"><span>${br?'✗':'✓'} ${p[0]}</span>${act}</div>`;
+  }).join('');
+  let body=`${pic(it)}
+  <h3>${it.name}</h3>
+  <small>${TPL[it.cat].n} · б/у · рыночная цена ${fmt(it.market)}</small>
+  <div class="sec-box">${partsHtml}</div>`;
+
+  if(it.status==='market'){
+    body+=`<div class="sec-box">
+      <div class="row"><span>Продавец просит</span><b>${fmt(it.ask)}</b></div>
+      <div class="inl"><input id="offerIn" type="number" placeholder="Ваша цена"><button class="btn sec" data-a="bargain" data-id="${it.uid}">Торговаться</button></div>
+      <div class="log">${it.log.map(l=>`<div>Вы: ${fmt(l.me)} → Продавец: ${fmt(l.them)}</div>`).join('')}</div>
+      <small>Попыток торга: ${3-it.rounds}</small>
+    </div>
+    <button class="btn ok" data-a="buy" data-id="${it.uid}" style="width:100%" ${S.money<it.ask?'disabled':''}>Купить за ${fmt(it.ask)}</button>`;
+  } else {
+    const fc=fullCost(it);
+    body+=`<div class="sec-box">
+      <div class="row"><span>Текущая оценка</span><b>${fmt(fair(it))}</b></div>
+      <div class="row"><span>Куплено за</span><b>${fmt(it.spent)}</b></div>
+      ${brokenCount(it)>1?`<div class="row"><span>Капремонт (все детали)</span><button class="btn sec" data-a="full" data-id="${it.uid}" ${S.money<fc?'disabled':''}>${fmt(fc)}</button></div>`:''}
+    </div>`;
+    if(it.status==='owned'){
+      body+=`<div class="sec-box">
+        <div class="inl"><input id="priceIn" type="number" value="${r100(fair(it)*1.08)}"><button class="btn" data-a="list" data-id="${it.uid}">Выставить на Авито</button></div>
+        <div class="row" style="margin-top:8px"><small>Скупщик выкупит сразу</small><button class="btn sec" data-a="scrap" data-id="${it.uid}">${fmt(r100(fair(it)*.6))}</button></div>
+      </div>`;
+    } else {
+      body+=`<div class="sec-box">
+        <div class="row"><span>Выставлено за</span><b>${fmt(it.price)}</b></div>
+        ${it.offer?`<div class="row"><span>Покупатель предлагает</span><b>${fmt(it.offer)}</b></div>
+          <div class="inl"><button class="btn ok" data-a="accept" data-id="${it.uid}">Продать</button><button class="btn sec" data-a="decline" data-id="${it.uid}">Отклонить</button></div>`
+          :'<small>Пока нет предложений. Они появляются со временем.</small>'}
+        <div class="inl"><button class="btn sec" data-a="unlist" data-id="${it.uid}">Снять с продажи</button></div>
+      </div>`;
+    }
+  }
+  $('#mbody').innerHTML=body;
+}
+
+function buy(id,price){
+  const it=find(id); const p=price||it.ask;
+  if(S.money<p){toast('Не хватает денег');return}
+  S.money-=p; it.spent=p; it.status='owned'; it.ask=0; it.log=[];
+  S.stats.bought++;
+  toast('Покупка совершена! Теперь товар в гараже');
+  closeModal();
+}
+
+function bargain(id){
+  const it=find(id);
+  const v=+($('#offerIn')?.value||0);
+  if(!v||v<=0){toast('Введите цену');return}
+  if(v>=it.min){
+    buy(id,Math.min(v,it.ask));
+    return;
+  }
+  if(it.rounds>=3){
+    S.items=S.items.filter(i=>i.uid!==id);
+    toast('Продавец ушёл, торг окончен');
+    closeModal();
+    return;
+  }
+  const counter=Math.max(it.min,r100((it.ask+v)/2));
+  it.log.push({me:v,them:counter});
+  it.ask=counter; it.rounds++;
+  toast(counter===it.min?'Продавец: это последняя цена':'Продавец перебил цену');
+}
+
+function repair(id,i){
+  const it=find(id); const c=repairCost(it,i);
+  if(S.money<c){toast('Не хватает денег на ремонт');return}
+  S.money-=c; it.broken[i]=false; it.spent+=c; S.stats.repairs+=c;
+  toast(`${TPL[it.cat].parts[i][0]} отремонтирован`);
+}
+
+function fullRepair(id){
+  const it=find(id); const c=fullCost(it);
+  if(S.money<c){toast('Не хватает денег');return}
+  S.money-=c; it.spent+=c; S.stats.repairs+=c; it.broken=it.broken.map(()=>false);
+  toast('Капремонт выполнен, товар как новый');
+}
+
+function listItem(id){
+  const it=find(id); const p=+($('#priceIn')?.value||0);
+  if(!p){toast('Укажите цену');return}
+  it.price=p; it.offer=0; it.status='listed';
+  toast('Объявление опубликовано');
+}
+
+function sellItem(id,p){
+  const it=find(id);
+  S.money+=p; S.stats.sold++; S.stats.profit+=p-it.spent;
+  S.items=S.items.filter(i=>i.uid!==id);
+  toast(`Продано за ${fmt(p)}`);
+  closeModal();
+}
+
+function nextDay(){
+  S.day++;
+  S.money-=RENT;
+  let news=[`Аренда гаража −${fmt(RENT)}`];
+  S.items=S.items.filter(i=>!(i.status==='market'&&Math.random()<.25));
+  while(S.items.filter(i=>i.status==='market').length<6) makeListing();
+  S.items.filter(i=>i.status==='listed'&&!i.offer).forEach(it=>{
+    const f=fair(it);
+    const chance=it.price<=f*1.05?.6:.25;
+    if(Math.random()<chance){
+      it.offer=r100(it.price*rnd(.72,.97));
+      news.push(`${it.name}: предложили ${fmt(it.offer)}`);
+    }
+  });
+  toast(news.slice(0,2).join(' · '));
+}
+
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1800);
+}
+
+function act(a,id,el){
+  switch(a){
+    case 'open': openItem(id); return;
+    case 'close': closeModal(); return;
+    case 'nextday': nextDay(); break;
+    case 'cat': cat=el.dataset.c; break;
+    case 'buy': buy(id); break;
+    case 'bargain': bargain(id); break;
+    case 'repair': repair(id,+el.dataset.i); break;
+    case 'full': fullRepair(id); break;
+    case 'list': listItem(id); break;
+    case 'unlist': { const it=find(id); it.status='owned'; it.price=0; it.offer=0; toast('Снято с продажи'); break; }
+    case 'accept': { const it=find(id); sellItem(id,it.offer); return; }
+    case 'decline': { const it=find(id); it.offer=0; toast('Предложение отклонено'); break; }
+    case 'scrap': { const it=find(id); sellItem(id,r100(fair(it)*.6)); return; }
+    case 'reset': if(confirm('Начать заново?')){ newState(); } break;
+  }
+  render();
+  if(modalId!==null) renderModal();
+}
+
+document.addEventListener('click',e=>{
+  if(e.target.id==='modal'){closeModal();return}
+  const el=e.target.closest('[data-a]'); if(!el) return;
+  act(el.dataset.a, +el.dataset.id, el);
+});
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.t;render()}));
+
+const tg=window.Telegram&&window.Telegram.WebApp;
+if(tg){try{tg.ready();tg.expand()}catch(e){}}
+
+S=load()||newState();
+render();
+</script>
+</body>
+</html>
